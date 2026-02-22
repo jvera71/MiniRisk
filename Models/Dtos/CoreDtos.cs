@@ -15,6 +15,7 @@ public class GameStateDto
     public int RemainingReinforcements { get; set; }
     public List<PlayerDto> Players { get; set; } = [];
     public List<TerritoryDto> Territories { get; set; } = [];
+    public List<CardDto> MyCards { get; set; } = []; // Cartas del jugador que pide el estado
     public List<GameEventDto> RecentEvents { get; set; } = [];
     public DateTime StartedAt { get; set; }
 }

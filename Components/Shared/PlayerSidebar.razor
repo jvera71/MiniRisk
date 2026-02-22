@@ -1,0 +1,46 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+
+<div class="sidebar">
+    <div class="panel">
+        <div class="panel-header">JUGADORES</div>
+
+        @foreach (var player in GameState.Players.Where(p => p.Color != PlayerColor.Neutral))
+        {
+            <PlayerCard Player="@player"
+                        IsCurrentTurn="@(player.PlayerId == GameState.CurrentPlayerId)"
+                        IsMe="@(player.PlayerId == MyPlayerId)" />
+        }
+    </div>
+
+    @if (GetMyCards().Any())
+    {
+        <div class="panel">
+            <div class="panel-header">MIS CARTAS</div>
+            <CardHand Cards="@GetMyCards()"
+                      CanTrade="@CanTradeCards()"
+                      MustTrade="@MustTradeCards()"
+                      OnTradeCards="OnTradeCards" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public EventCallback<string[]> OnTradeCards { get; set; }
+
+    private List<CardDto> GetMyCards()
+    {
+        return GameState.MyCards ?? [];
+    }
+
+    private bool CanTradeCards() =>
+        GetMyCards().Count >= 3
+        && GameState.CurrentPlayerId == MyPlayerId
+        && GameState.Phase == GamePhase.Reinforcement;
+
+    private bool MustTradeCards() =>
+        GetMyCards().Count >= 5
+        && GameState.CurrentPlayerId == MyPlayerId;
+}

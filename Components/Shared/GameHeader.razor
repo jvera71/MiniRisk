@@ -1,0 +1,40 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+
+<div class="game-header">
+    <span class="header-logo">🎲 MiniRisk</span>
+    <span class="header-turn">Turno @GameState.TurnNumber</span>
+    <span class="header-phase phase-@GameState.Phase.ToString().ToLower()">
+        @GetPhaseLabel()
+    </span>
+    <span class="header-current-player"
+          style="color: var(--player-@GetColorClass())">
+        @(IsMyTurn ? "► TU TURNO" : $"Turno de: {GameState.CurrentPlayerName}")
+    </span>
+    <span class="header-actions">
+        <button class="btn btn-secondary btn-small" title="Configuración">⚙</button>
+    </span>
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+
+    private bool IsMyTurn => GameState.CurrentPlayerId == MyPlayerId;
+
+    private string GetPhaseLabel() => GameState.Phase switch
+    {
+        GamePhase.Setup => "⚙ CONFIGURACIÓN",
+        GamePhase.Reinforcement => "🛡️ REFUERZO",
+        GamePhase.Attack => "⚔️ ATAQUE",
+        GamePhase.Fortification => "🏰 FORTIFICACIÓN",
+        _ => GameState.Phase.ToString().ToUpper()
+    };
+
+    private string GetColorClass()
+    {
+        var player = GameState.Players
+            .FirstOrDefault(p => p.PlayerId == GameState.CurrentPlayerId);
+        return player?.Color.ToString().ToLower() ?? "neutral";
+    }
+}

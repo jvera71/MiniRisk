@@ -1,0 +1,80 @@
+@using MiniRisk.Models.Dtos
+
+<div class="dice-roller @(_isRolling ? "dice-roller--rolling" : "")">
+    @if (AttackResult != null || _isRolling)
+    {
+        <div class="dice-row dice-row--attacker">
+            <span class="dice-label">Ataque:</span>
+            @foreach (var (die, index) in GetAttackerDice().Select((d, i) => (d, i)))
+            {
+                <div class="dice @(_isRolling ? "dice-rolling" : "")
+                            @(GetDieResult(index, true))">
+                    @(die > 0 ? die.ToString() : "?")
+                </div>
+            }
+        </div>
+
+        <div class="dice-vs">VS</div>
+
+        <div class="dice-row dice-row--defender">
+            <span class="dice-label">Defensa:</span>
+            @foreach (var (die, index) in GetDefenderDice().Select((d, i) => (d, i)))
+            {
+                <div class="dice @(_isRolling ? "dice-rolling" : "")
+                            @(GetDieResult(index, false))">
+                    @(die > 0 ? die.ToString() : "?")
+                </div>
+            }
+        </div>
+
+        @if (AttackResult != null && !_isRolling)
+        {
+            <div class="dice-summary">
+                <span class="loss loss--attacker">Atk: -@AttackResult.AttackerLosses</span>
+                <span class="loss loss--defender">Def: -@AttackResult.DefenderLosses</span>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public AttackResult? AttackResult { get; set; }
+
+    private bool _isRolling;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (AttackResult != null)
+        {
+            // Animación de dados girando
+            _isRolling = true;
+            StateHasChanged();
+
+            await Task.Delay(1200); // 3 giros × 0.4s
+
+            _isRolling = false;
+            StateHasChanged();
+        }
+    }
+
+    private int[] GetAttackerDice() => AttackResult?.AttackerDice ?? [];
+    private int[] GetDefenderDice() => AttackResult?.DefenderDice ?? [];
+
+    private string GetDieResult(int index, bool isAttacker)
+    {
+        if (_isRolling || AttackResult == null) return "";
+
+        var atkDice = AttackResult.AttackerDice;
+        var defDice = AttackResult.DefenderDice;
+
+        if (index >= Math.Min(atkDice.Length, defDice.Length))
+            return "dice-result-neutral";
+
+        if (isAttacker)
+            return atkDice[index] > defDice[index]
+                ? "dice-result-win" : "dice-result-lose";
+        else
+            return defDice[index] >= atkDice[index]
+                ? "dice-result-win" : "dice-result-lose";
+    }
+}

@@ -1,0 +1,60 @@
+@using MiniRisk.Models.Dtos
+
+<div class="attack-panel">
+    <h3>⚔️ Ataque</h3>
+    
+    <div class="selection-summary">
+        <div class="atk-box @(SelectedAttacker != null ? "selected" : "")">
+            <span>Atacante:</span>
+            <strong>@(GetTerritoryName(SelectedAttacker))</strong>
+        </div>
+        <div class="vs">VS</div>
+        <div class="def-box @(SelectedDefender != null ? "selected" : "")">
+            <span>Defensor:</span>
+            <strong>@(GetTerritoryName(SelectedDefender))</strong>
+        </div>
+    </div>
+
+    @if (SelectedAttacker != null && SelectedDefender != null)
+    {
+        <div class="dice-selector" style="margin-top: 1rem; text-align: center;">
+            <p>¿Con cuántos dados atacas?</p>
+            <div style="display: flex; justify-content: center; gap: 0.5rem;">
+                @for (int i = 1; i <= GetMaxDice(); i++)
+                {
+                    var count = i;
+                    <button class="btn btn-secondary" @onclick="() => OnAttack.InvokeAsync(count)">@count 🎲</button>
+                }
+            </div>
+        </div>
+    }
+
+    <button class="btn btn-secondary btn-full" style="margin-top: 1.5rem;" @onclick="OnEndPhase">
+        Finalizar Ataque
+    </button>
+
+    @if (LastResult != null)
+    {
+        <DiceRoller AttackResult="LastResult" />
+    }
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public string? SelectedAttacker { get; set; }
+    [Parameter] public string? SelectedDefender { get; set; }
+    [Parameter] public AttackResult? LastResult { get; set; }
+    [Parameter] public EventCallback<int> OnAttack { get; set; }
+    [Parameter] public EventCallback OnEndPhase { get; set; }
+
+    private string GetTerritoryName(string? id) => 
+        GameState.Territories.FirstOrDefault(t => t.TerritoryId == id)?.TerritoryName ?? "Seleccionar...";
+
+    private int GetMaxDice()
+    {
+        var atk = GameState.Territories.FirstOrDefault(t => t.TerritoryId == SelectedAttacker);
+        if (atk == null) return 0;
+        return Math.Min(3, atk.Armies - 1);
+    }
+}

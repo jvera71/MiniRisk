@@ -1,0 +1,50 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+
+<div class="turn-controls panel">
+    @switch (GameState.Phase)
+    {
+        case GamePhase.Reinforcement:
+            <ReinforcementPanel GameState="@GameState"
+                                MyPlayerId="@MyPlayerId"
+                                SelectedTerritory="@SelectedAttacker"
+                                OnPlace="OnPlaceReinforcements"
+                                OnConfirm="OnConfirmReinforcements" />
+            break;
+
+        case GamePhase.Attack:
+            <AttackPanel GameState="@GameState"
+                         MyPlayerId="@MyPlayerId"
+                         SelectedAttacker="@SelectedAttacker"
+                         SelectedDefender="@SelectedDefender"
+                         LastResult="@LastAttackResult"
+                         OnAttack="OnAttack"
+                         OnEndPhase="OnEndAttackPhase" />
+            break;
+
+        case GamePhase.Fortification:
+            <FortifyPanel GameState="@GameState"
+                          MyPlayerId="@MyPlayerId"
+                          SelectedFrom="@SelectedFortifyFrom"
+                          SelectedTo="@SelectedFortifyTo"
+                          OnFortify="OnFortify"
+                          OnSkip="OnSkipFortification" />
+            break;
+    }
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public string? SelectedAttacker { get; set; }
+    [Parameter] public string? SelectedDefender { get; set; }
+    [Parameter] public string? SelectedFortifyFrom { get; set; }
+    [Parameter] public string? SelectedFortifyTo { get; set; }
+    [Parameter] public AttackResult? LastAttackResult { get; set; }
+    [Parameter] public EventCallback<(string, int)> OnPlaceReinforcements { get; set; }
+    [Parameter] public EventCallback OnConfirmReinforcements { get; set; }
+    [Parameter] public EventCallback<int> OnAttack { get; set; }
+    [Parameter] public EventCallback OnEndAttackPhase { get; set; }
+    [Parameter] public EventCallback<int> OnFortify { get; set; }
+    [Parameter] public EventCallback OnSkipFortification { get; set; }
+}

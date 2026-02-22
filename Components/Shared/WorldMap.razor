@@ -1,0 +1,84 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+
+<div class="world-map-container panel">
+    <svg viewBox="0 0 1200 700" xmlns="http://www.w3.org/2000/svg" class="world-map">
+        <!-- Fondo oceánico -->
+        <rect width="1200" height="700" fill="#0a0e1a" />
+
+        <!-- Conexiones intercontinentales -->
+        <g id="connections" stroke="rgba(255,255,255,0.15)" stroke-width="1.5" stroke-dasharray="6,4" fill="none">
+            <line x1="65" y1="75" x2="30" y2="60" />
+            <line x1="1170" y1="60" x2="1010" y2="60" />
+            <line x1="340" y1="45" x2="465" y2="55" />
+            <line x1="160" y1="290" x2="220" y2="365" />
+            <line x1="290" y1="430" x2="490" y2="340" />
+            <line x1="475" y1="220" x2="490" y2="340" />
+            <line x1="545" y1="230" x2="490" y2="340" />
+            <line x1="545" y1="230" x2="570" y2="310" />
+            <line x1="545" y1="230" x2="650" y2="270" />
+            <line x1="600" y1="410" x2="650" y2="270" />
+            <line x1="880" y1="330" x2="910" y2="430" />
+        </g>
+
+        <!-- Territorios -->
+        @foreach (var territory in GameState.Territories)
+        {
+            <TerritoryPath Territory="@territory"
+                           IsSelectable="@IsTerritorySelectable(territory)"
+                           IsSelected="@IsTerritorySelected(territory)"
+                           IsTarget="@IsTerritoryTarget(territory)"
+                           SelectionType="@GetSelectionType(territory)"
+                           OnClicked="() => OnTerritoryClicked.InvokeAsync(territory.TerritoryId)" />
+        }
+    </svg>
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public GamePhase CurrentPhase { get; set; }
+    [Parameter] public string? SelectedAttacker { get; set; }
+    [Parameter] public string? SelectedDefender { get; set; }
+    [Parameter] public string? SelectedFortifyFrom { get; set; }
+    [Parameter] public string? SelectedFortifyTo { get; set; }
+    [Parameter] public EventCallback<string> OnTerritoryClicked { get; set; }
+
+    private bool IsTerritorySelectable(TerritoryDto territory)
+    {
+        bool isMyTurn = GameState.CurrentPlayerId == MyPlayerId;
+        if (!isMyTurn) return false;
+
+        return CurrentPhase switch
+        {
+            GamePhase.Reinforcement => territory.OwnerId == MyPlayerId,
+            GamePhase.Attack when SelectedAttacker == null
+                => territory.OwnerId == MyPlayerId && territory.Armies >= 2,
+            GamePhase.Attack when SelectedAttacker != null
+                => territory.OwnerId != MyPlayerId, 
+            GamePhase.Fortification => territory.OwnerId == MyPlayerId,
+            _ => false
+        };
+    }
+
+    private bool IsTerritorySelected(TerritoryDto territory)
+    {
+        return territory.TerritoryId == SelectedAttacker
+            || territory.TerritoryId == SelectedFortifyFrom;
+    }
+
+    private bool IsTerritoryTarget(TerritoryDto territory)
+    {
+        return territory.TerritoryId == SelectedDefender
+            || territory.TerritoryId == SelectedFortifyTo;
+    }
+
+    private string GetSelectionType(TerritoryDto territory)
+    {
+        if (territory.TerritoryId == SelectedAttacker) return "attacker";
+        if (territory.TerritoryId == SelectedDefender) return "defender";
+        if (territory.TerritoryId == SelectedFortifyFrom) return "fortify-from";
+        if (territory.TerritoryId == SelectedFortifyTo) return "fortify-to";
+        return "none";
+    }
+}

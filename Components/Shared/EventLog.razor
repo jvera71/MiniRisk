@@ -1,0 +1,46 @@
+@using MiniRisk.Models.Dtos
+
+<div class="event-log panel" @ref="_logContainer">
+    <div class="panel-header">LOG DE EVENTOS</div>
+
+    <div class="event-list">
+        @foreach (var evt in Events)
+        {
+            <div class="event-entry event-@evt.Type.ToString().ToLower()">
+                <span class="event-time">@evt.Timestamp.ToLocalTime().ToString("HH:mm")</span>
+                <span class="event-icon">@GetEventIcon(evt.Type)</span>
+                <span class="event-message">@evt.Message</span>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public List<GameEventDto> Events { get; set; } = [];
+
+    private ElementReference _logContainer;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // Auto-scroll al final (sería ideal con JS, pero de momento básico)
+    }
+
+    private string GetEventIcon(MiniRisk.Models.Enums.GameEventType eventType) => eventType switch
+    {
+        GameEventType.GameStarted => "🎮",
+        GameEventType.TurnStarted => "🔄",
+        GameEventType.ReinforcementsPlaced => "🛡️",
+        GameEventType.AttackLaunched => "⚔️",
+        GameEventType.DiceRolled => "🎲",
+        GameEventType.TerritoryConquered => "🏴",
+        GameEventType.PlayerEliminated => "💀",
+        GameEventType.CardsTraded => "🃏",
+        GameEventType.Fortified => "🏰",
+        GameEventType.TurnEnded => "⏭️",
+        GameEventType.PlayerDisconnected => "⚠️",
+        GameEventType.PlayerReconnected => "✅",
+        GameEventType.GameOver => "🏆",
+        GameEventType.ChatMessage => "💬",
+        _ => "📌"
+    };
+}

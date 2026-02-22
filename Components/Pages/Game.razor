@@ -1,0 +1,249 @@
+@page "/game/{GameId}"
+@using Microsoft.AspNetCore.SignalR.Client
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+@using MiniRisk.Services.Interfaces
+@inject IPlayerSessionService PlayerSession
+@inject IGameManager GameManager
+@inject NavigationManager Navigation
+@implements IAsyncDisposable
+
+<PageTitle>MiniRisk — @(_gameState?.GameName ?? "Cargando...")</PageTitle>
+
+@if (_gameState == null)
+{
+    <div class="loading">Cargando partida...</div>
+}
+else if (_gameState.Status == GameStatus.Finished)
+{
+    <GameOverOverlay GameState="_gameState"
+                     MyPlayerId="@PlayerSession.PlayerId"
+                     OnBackToLobby="NavigateToLobby" />
+}
+else
+{
+    <div class="game-layout">
+        <GameHeader GameState="_gameState"
+                    MyPlayerId="@PlayerSession.PlayerId" />
+
+        <WorldMap GameState="_gameState"
+                  MyPlayerId="@PlayerSession.PlayerId"
+                  CurrentPhase="_gameState.Phase"
+                  SelectedAttacker="_selectedAttacker"
+                  SelectedDefender="_selectedDefender"
+                  SelectedFortifyFrom="_selectedFortifyFrom"
+                  SelectedFortifyTo="_selectedFortifyTo"
+                  OnTerritoryClicked="HandleTerritoryClicked" />
+
+        <PlayerSidebar GameState="_gameState"
+                       MyPlayerId="@PlayerSession.PlayerId"
+                       OnTradeCards="HandleTradeCards" />
+
+        <TurnControls GameState="_gameState"
+                      MyPlayerId="@PlayerSession.PlayerId"
+                      SelectedAttacker="_selectedAttacker"
+                      SelectedDefender="_selectedDefender"
+                      SelectedFortifyFrom="_selectedFortifyFrom"
+                      SelectedFortifyTo="_selectedFortifyTo"
+                      LastAttackResult="_lastAttackResult"
+                      OnPlaceReinforcements="HandlePlaceReinforcements"
+                      OnAttack="HandleAttack"
+                      OnEndAttackPhase="HandleEndAttackPhase"
+                      OnFortify="HandleFortify"
+                      OnSkipFortification="HandleSkipFortification"
+                      OnConfirmReinforcements="HandleConfirmReinforcements" />
+
+        <EventLog Events="_gameState.RecentEvents" />
+    </div>
+
+    <ToastContainer Toasts="_toasts" />
+}
+
+@code {
+    [Parameter] public string GameId { get; set; } = string.Empty;
+
+    private HubConnection? _hubConnection;
+    private GameStateDto? _gameState;
+
+    private string? _selectedAttacker;
+    private string? _selectedDefender;
+    private string? _selectedFortifyFrom;
+    private string? _selectedFortifyTo;
+
+    private AttackResult? _lastAttackResult;
+    private List<ToastMessage> _toasts = [];
+
+    private bool IsMyTurn => _gameState?.CurrentPlayerId == PlayerSession.PlayerId;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!PlayerSession.IsIdentified)
+        {
+            Navigation.NavigateTo("/");
+            return;
+        }
+
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/gamehub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        RegisterHubHandlers();
+
+        await _hubConnection.StartAsync();
+
+        await _hubConnection.SendAsync("JoinGame", GameId);
+        
+        // El estado inicial se recibirá vía GameStateUpdated o podemos pedirlo.
+        // Simulamos petición inicial:
+        // _gameState = GameManager.GetGameState(GameId); // Si el backend lo soporta
+    }
+
+    private void RegisterHubHandlers()
+    {
+        _hubConnection!.On<GameStateDto>("GameStateUpdated", state =>
+        {
+            _gameState = state;
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On<AttackResult>("DiceRolled", result =>
+        {
+            _lastAttackResult = result;
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On<string, string>("TerritoryConquered", (playerName, territoryName) =>
+        {
+            AddToast($"🏴 {playerName} conquistó {territoryName}", ToastType.Info);
+            _selectedAttacker = null;
+            _selectedDefender = null;
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On<string>("PlayerEliminated", playerName =>
+        {
+            AddToast($"💀 {playerName} ha sido eliminado", ToastType.Error);
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On("YourTurn", () =>
+        {
+            AddToast("¡Es tu turno! Fase de refuerzo.", ToastType.Info);
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On<string>("GameOver", winnerName => { InvokeAsync(StateHasChanged); });
+
+        _hubConnection.On<string>("ActionError", message =>
+        {
+            AddToast($"❌ {message}", ToastType.Error);
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void HandleTerritoryClicked(string territoryId)
+    {
+        if (!IsMyTurn || _gameState == null) return;
+
+        var territory = _gameState.Territories.FirstOrDefault(t => t.TerritoryId == territoryId);
+        if (territory == null) return;
+
+        switch (_gameState.Phase)
+        {
+            case GamePhase.Reinforcement:
+                if (territory.OwnerId == PlayerSession.PlayerId)
+                {
+                    _selectedAttacker = territory.TerritoryId; // Reutilizamos para selección simple
+                }
+                break;
+            case GamePhase.Attack:
+                if (territory.OwnerId == PlayerSession.PlayerId && territory.Armies >= 2)
+                {
+                    _selectedAttacker = territory.TerritoryId;
+                    _selectedDefender = null;
+                }
+                else if (territory.OwnerId != PlayerSession.PlayerId && _selectedAttacker != null)
+                {
+                    _selectedDefender = territory.TerritoryId;
+                }
+                break;
+            case GamePhase.Fortification:
+                if (territory.OwnerId == PlayerSession.PlayerId)
+                {
+                    if (_selectedFortifyFrom == null) _selectedFortifyFrom = territory.TerritoryId;
+                    else if (_selectedFortifyTo == null) _selectedFortifyTo = territory.TerritoryId;
+                    else { _selectedFortifyFrom = territory.TerritoryId; _selectedFortifyTo = null; }
+                }
+                break;
+        }
+    }
+
+    private async Task HandlePlaceReinforcements((string territoryId, int count) data)
+    {
+        if (_hubConnection == null) return;
+        await _hubConnection.SendAsync("PlaceReinforcements", GameId, PlayerSession.PlayerId, data.territoryId, data.count);
+    }
+
+    private async Task HandleConfirmReinforcements()
+    {
+        if (_hubConnection == null) return;
+        await _hubConnection.SendAsync("ConfirmReinforcements", GameId, PlayerSession.PlayerId);
+    }
+
+    private async Task HandleAttack(int diceCount)
+    {
+        if (_hubConnection == null || _selectedAttacker == null || _selectedDefender == null) return;
+        await _hubConnection.SendAsync("Attack", GameId, PlayerSession.PlayerId, _selectedAttacker, _selectedDefender, diceCount);
+    }
+
+    private async Task HandleEndAttackPhase()
+    {
+        if (_hubConnection == null) return;
+        _selectedAttacker = null; _selectedDefender = null; _lastAttackResult = null;
+        await _hubConnection.SendAsync("EndAttackPhase", GameId, PlayerSession.PlayerId);
+    }
+
+    private async Task HandleFortify(int armyCount)
+    {
+        if (_hubConnection == null || _selectedFortifyFrom == null || _selectedFortifyTo == null) return;
+        await _hubConnection.SendAsync("Fortify", GameId, PlayerSession.PlayerId, _selectedFortifyFrom, _selectedFortifyTo, armyCount);
+        _selectedFortifyFrom = null; _selectedFortifyTo = null;
+    }
+
+    private async Task HandleSkipFortification()
+    {
+        if (_hubConnection == null) return;
+        _selectedFortifyFrom = null; _selectedFortifyTo = null;
+        await _hubConnection.SendAsync("SkipFortification", GameId, PlayerSession.PlayerId);
+    }
+
+    private async Task HandleTradeCards(string[] cardIds)
+    {
+        if (_hubConnection == null) return;
+        await _hubConnection.SendAsync("TradeCards", GameId, PlayerSession.PlayerId, cardIds);
+    }
+
+    private void NavigateToLobby()
+    {
+        PlayerSession.LeaveGame();
+        Navigation.NavigateTo("/lobby");
+    }
+
+    private void AddToast(string message, ToastType type)
+    {
+        _toasts.Add(new ToastMessage { Message = message, Type = type, CreatedAt = DateTime.UtcNow });
+        if (_toasts.Count > 5) _toasts.RemoveAt(0);
+        StateHasChanged();
+        // Auto-remove after 5s
+        Task.Delay(5000).ContinueWith(_ => { _toasts.RemoveAll(t => t.Message == message); InvokeAsync(StateHasChanged); });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
+    }
+}

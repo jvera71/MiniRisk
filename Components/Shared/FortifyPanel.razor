@@ -1,0 +1,53 @@
+@using MiniRisk.Models.Dtos
+
+<div class="fortify-panel">
+    <h3>🏰 Fortificación</h3>
+
+    <div class="selection-summary">
+        <div>Desde: <strong>@(GetTerritoryName(SelectedFrom))</strong></div>
+        <div>Hacia: <strong>@(GetTerritoryName(SelectedTo))</strong></div>
+    </div>
+
+    @if (SelectedFrom != null && SelectedTo != null)
+    {
+        <div class="action-box" style="margin-top: 1rem;">
+            <p>¿Cuántos ejércitos mover?</p>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="number" min="1" max="@(GetMaxMove())" @bind="_count" class="input" style="width: 80px;" />
+                <button class="btn btn-primary" @onclick="HandleFortify">Mover</button>
+            </div>
+        </div>
+    }
+
+    <button class="btn btn-secondary btn-full" style="margin-top: 1.5rem;" @onclick="OnSkip">
+        Pasar Turno
+    </button>
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public string? SelectedFrom { get; set; }
+    [Parameter] public string? SelectedTo { get; set; }
+    [Parameter] public EventCallback<int> OnFortify { get; set; }
+    [Parameter] public EventCallback OnSkip { get; set; }
+
+    private int _count = 1;
+
+    private string GetTerritoryName(string? id) => 
+        GameState.Territories.FirstOrDefault(t => t.TerritoryId == id)?.TerritoryName ?? "Seleccionar...";
+
+    private int GetMaxMove()
+    {
+        var from = GameState.Territories.FirstOrDefault(t => t.TerritoryId == SelectedFrom);
+        return from != null ? from.Armies - 1 : 0;
+    }
+
+    private async Task HandleFortify()
+    {
+        if (_count > 0 && _count <= GetMaxMove())
+        {
+            await OnFortify.InvokeAsync(_count);
+        }
+    }
+}

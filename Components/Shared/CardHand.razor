@@ -1,0 +1,56 @@
+@using MiniRisk.Models.Dtos
+
+<div class="card-hand">
+    <div class="cards-list" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin-bottom: 1rem;">
+        @foreach (var card in Cards)
+        {
+            <div class="game-card-item @(IsSelected(card.CardId) ? "selected" : "")" 
+                 style="border: 1px solid var(--border-default); padding: 0.5rem; border-radius: 4px; cursor: pointer; background: var(--bg-tertiary);"
+                 @onclick="() => ToggleSelection(card.CardId)">
+                <div>@card.Type</div>
+                <div style="font-size: 0.7rem; opacity: 0.7;">@card.TerritoryDisplayName</div>
+            </div>
+        }
+    </div>
+
+    @if (CanTrade || MustTrade)
+    {
+        <button class="btn btn-primary btn-full" 
+                disabled="@(_selectedCards.Count != 3)"
+                @onclick="HandleTrade">
+            Canjear Cartas (3)
+        </button>
+        @if (MustTrade)
+        {
+            <p style="color: var(--color-danger); font-size: 0.8rem; margin-top: 0.5rem;">⚠️ Debes canjear para continuar</p>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<CardDto> Cards { get; set; } = [];
+    [Parameter] public bool CanTrade { get; set; }
+    [Parameter] public bool MustTrade { get; set; }
+    [Parameter] public EventCallback<string[]> OnTradeCards { get; set; }
+
+    private List<string> _selectedCards = [];
+
+    private bool IsSelected(string cardId) => _selectedCards.Contains(cardId);
+
+    private void ToggleSelection(string cardId)
+    {
+        if (_selectedCards.Contains(cardId))
+            _selectedCards.Remove(cardId);
+        else if (_selectedCards.Count < 3)
+            _selectedCards.Add(cardId);
+    }
+
+    private async Task HandleTrade()
+    {
+        if (_selectedCards.Count == 3)
+        {
+            await OnTradeCards.InvokeAsync(_selectedCards.ToArray());
+            _selectedCards.Clear();
+        }
+    }
+}

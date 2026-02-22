@@ -1,0 +1,63 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Services
+
+<g class="territory
+          @(IsSelectable ? "territory--selectable" : "territory--disabled")
+          @(IsSelected ? "territory--selected" : "")
+          @(IsTarget ? "territory--target" : "")
+          territory--@SelectionType"
+   @onclick="HandleClick">
+
+    <!-- Forma del territorio -->
+    <path d="@GetTerritoryPath()"
+          fill="@GetFillColor()"
+          stroke="@GetStrokeColor()"
+          stroke-width="@GetStrokeWidth()"
+          class="territory-shape" />
+
+    <!-- Badge de ejércitos -->
+    <circle cx="@GetCenterX()" cy="@GetCenterY()"
+            r="12"
+            fill="@GetFillColor()"
+            stroke="rgba(0,0,0,0.5)"
+            stroke-width="1.5"
+            class="territory-army-circle" />
+    <text x="@GetCenterX()" y="@(GetCenterY() + 4)"
+          class="territory-army-badge">
+        @Territory.Armies
+    </text>
+</g>
+
+@code {
+    [Parameter] public TerritoryDto Territory { get; set; } = default!;
+    [Parameter] public bool IsSelectable { get; set; }
+    [Parameter] public bool IsSelected { get; set; }
+    [Parameter] public bool IsTarget { get; set; }
+    [Parameter] public string SelectionType { get; set; } = "none";
+    [Parameter] public EventCallback OnClicked { get; set; }
+
+    private async Task HandleClick()
+    {
+        if (IsSelectable || IsSelected || IsTarget)
+        {
+            await OnClicked.InvokeAsync();
+        }
+    }
+
+    private string GetTerritoryPath() => TerritoryPaths.Get(Territory.TerritoryId);
+    private float GetCenterX() => TerritoryPaths.GetCenterX(Territory.TerritoryId);
+    private float GetCenterY() => TerritoryPaths.GetCenterY(Territory.TerritoryId);
+
+    private string GetFillColor() => $"var(--player-{Territory.OwnerColor.ToString().ToLower()})";
+
+    private string GetStrokeColor() => SelectionType switch
+    {
+        "attacker" => "white",
+        "defender" => "var(--color-danger)",
+        "fortify-from" => "var(--color-info)",
+        "fortify-to" => "var(--color-success)",
+        _ => "rgba(255,255,255,0.2)"
+    };
+
+    private string GetStrokeWidth() => (IsSelected || IsTarget) ? "3" : "1";
+}

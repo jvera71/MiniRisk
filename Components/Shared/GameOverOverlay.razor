@@ -1,0 +1,58 @@
+@using MiniRisk.Models.Dtos
+
+<div class="gameover-overlay">
+    <div class="gameover-backdrop"></div>
+    <div class="gameover-content">
+        <h1 class="gameover-title">🏆 ¡VICTORIA! 🏆</h1>
+
+        <p class="gameover-winner"
+           style="color: var(--player-@WinnerColor.ToLower())">
+            @WinnerName ha conquistado el mundo
+        </p>
+
+        <div class="gameover-stats">
+            <div class="stat">
+                <span class="stat-label">Turnos</span>
+                <span class="stat-value">@GameState.TurnNumber</span>
+            </div>
+            <div class="stat">
+                <span class="stat-label">Duración</span>
+                <span class="stat-value">@GetDuration()</span>
+            </div>
+        </div>
+
+        @if (IsWinner)
+        {
+            <p class="gameover-message">¡Felicidades, has conquistado el mundo! 🎉</p>
+        }
+        else
+        {
+            <p class="gameover-message">Mejor suerte la próxima vez...</p>
+        }
+
+        <button class="btn btn-primary" @onclick="OnBackToLobby">
+            Volver al Lobby
+        </button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnBackToLobby { get; set; }
+
+    private string WinnerName => GameState.Players
+        .FirstOrDefault(p => !p.IsEliminated)?.PlayerName ?? "?";
+    private string WinnerColor => GameState.Players
+        .FirstOrDefault(p => !p.IsEliminated)?.Color.ToString() ?? "Neutral";
+    private bool IsWinner => GameState.Players
+        .FirstOrDefault(p => !p.IsEliminated)?.PlayerId == MyPlayerId;
+
+    private string GetDuration()
+    {
+        var elapsed = DateTime.UtcNow - GameState.StartedAt;
+        return elapsed.TotalMinutes < 60
+            ? $"{(int)elapsed.TotalMinutes} min"
+            : $"{(int)elapsed.TotalHours}h {elapsed.Minutes:D2}min";
+    }
+}

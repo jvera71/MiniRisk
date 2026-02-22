@@ -1,0 +1,43 @@
+@using MiniRisk.Models.Dtos
+@using MiniRisk.Models.Enums
+
+<div class="player-card @(IsCurrentTurn ? "player-card--active" : "")
+                        @(Player.IsEliminated ? "player-card--eliminated" : "")
+                        @(IsMe ? "player-card--me" : "")"
+     style="border-left: 3px solid var(--player-@Player.Color.ToString().ToLower())">
+
+    <div class="player-card__header">
+        @if (IsCurrentTurn)
+        {
+            <span class="turn-indicator">▶</span>
+        }
+        <span class="player-card__name">
+            @Player.PlayerName
+            @if (IsMe) { <span class="badge badge-me">TÚ</span> }
+        </span>
+        <span class="player-card__color"
+              style="background: var(--player-@Player.Color.ToString().ToLower())">
+        </span>
+    </div>
+
+    <div class="player-card__stats">
+        <span title="Territorios">🗺️ @Player.TerritoryCount</span>
+        <span title="Ejércitos">⚔️ @Player.TotalArmies</span>
+        <span title="Cartas">🃏 @Player.CardCount</span>
+    </div>
+
+    @if (!Player.IsConnected && !Player.IsEliminated)
+    {
+        <div class="player-card__status disconnected">⚠️ Desconectado</div>
+    }
+    @if (Player.IsEliminated)
+    {
+        <div class="player-card__status eliminated">✕ Eliminado</div>
+    }
+</div>
+
+@code {
+    [Parameter] public PlayerDto Player { get; set; } = default!;
+    [Parameter] public bool IsCurrentTurn { get; set; }
+    [Parameter] public bool IsMe { get; set; }
+}

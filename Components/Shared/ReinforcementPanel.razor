@@ -1,0 +1,47 @@
+@using MiniRisk.Models.Dtos
+
+<div class="reinforcement-panel">
+    <h3>🛡️ Refuerzo</h3>
+    <p>Tropas restantes: <strong>@GameState.RemainingReinforcements</strong></p>
+    
+    @if (!string.IsNullOrEmpty(SelectedTerritory))
+    {
+        <div class="action-box">
+            <p>Reforzar: @GetTerritoryName()</p>
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="number" min="1" max="@GameState.RemainingReinforcements" @bind="_count" class="input" style="width: 80px;" />
+                <button class="btn btn-primary" disabled="@(GameState.RemainingReinforcements <= 0)" @onclick="HandlePlace">Reforzar</button>
+            </div>
+        </div>
+    }
+    else
+    {
+        <p class="hint">Selecciona un territorio para reforzar</p>
+    }
+
+    <button class="btn btn-secondary btn-full" style="margin-top: 1rem;" 
+            disabled="@(GameState.RemainingReinforcements > 0)"
+            @onclick="OnConfirm">
+        Confirmar y Continuar
+    </button>
+</div>
+
+@code {
+    [Parameter] public GameStateDto GameState { get; set; } = default!;
+    [Parameter] public string MyPlayerId { get; set; } = string.Empty;
+    [Parameter] public string? SelectedTerritory { get; set; }
+    [Parameter] public EventCallback<(string, int)> OnPlace { get; set; }
+    [Parameter] public EventCallback OnConfirm { get; set; }
+
+    private int _count = 1;
+
+    private string GetTerritoryName() => GameState.Territories.FirstOrDefault(t => t.TerritoryId == SelectedTerritory)?.TerritoryName ?? "Desconocido";
+
+    private async Task HandlePlace()
+    {
+        if (!string.IsNullOrEmpty(SelectedTerritory) && _count > 0)
+        {
+            await OnPlace.InvokeAsync((SelectedTerritory, _count));
+        }
+    }
+}
