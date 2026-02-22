@@ -227,3 +227,67 @@ h1.logo-text,
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     margin-top: 2rem;
 }
+
+/* Modales */
+.modal-backdrop {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0, 0, 0, 0.75);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    backdrop-filter: blur(4px);
+}
+
+.modal-dialog {
+    z-index: 1001;
+    position: relative;
+    max-width: 500px;
+    width: 95%;
+    animation: modal-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modal-in {
+    from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.95);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.modal-title {
+    font-family: var(--font-display);
+    font-size: var(--text-2xl);
+    margin-bottom: 2rem;
+    color: white;
+    text-align: center;
+}
+
+.radio-group label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 16px;
+    background: var(--bg-surface);
+    border: 1px solid var(--border-default);
+    border-radius: 8px;
+    transition: all 0.2s ease;
+}
+
+.radio-group label:hover {
+    border-color: var(--accent-primary);
+}
+
+.radio-group input[type="radio"] {
+    accent-color: var(--accent-primary);
+    width: 18px;
+    height: 18px;
+}
