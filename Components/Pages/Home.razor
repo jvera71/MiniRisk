@@ -118,7 +118,7 @@
             GameManager.RegisterPlayer(PlayerSession.PlayerId, name);
             Navigation.NavigateTo("/lobby");
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             errorMessage = "Ocurrió un error al iniciar sesión.";
             isSubmitting = false;

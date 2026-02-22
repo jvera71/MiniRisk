@@ -20,7 +20,7 @@ public enum TerritoryName
     
     // Asia (12)
     MiddleEast, Afghanistan, Ural, Siberia,
-    Yakutsk, MyIrkutsk, Kamchatka, Mongolia,
+    Yakutsk, Irkutsk, Kamchatka, Mongolia,
     Japan, China, India, SoutheastAsia,
     
     // Oceanía (4)

@@ -1,5 +1,6 @@
 using MiniRisk.Models;
 using MiniRisk.Models.Dtos;
+using MiniRisk.Models.Enums;
 using MiniRisk.Services.Interfaces;
 
 namespace MiniRisk.Models.Dtos;
@@ -22,7 +23,7 @@ public static class DtoMappers
             StartedAt = game.StartedAt ?? DateTime.MinValue,
             Players = game.Players.Select(p => p.ToDto(game)).ToList(),
             Territories = game.Territories.Values.Select(t => t.ToDto(game, mapService)).ToList(),
-            RecentEvents = game.Events.TakeLast(10).Select(e => e.ToDto()).ToList()
+            RecentEvents = game.EventLog.TakeLast(10).Select(e => e.ToDto()).ToList()
         };
     }
 
