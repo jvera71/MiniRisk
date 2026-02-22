@@ -1,4 +1,5 @@
 using MiniRisk.Models;
+using MiniRisk.Models.Enums;
 
 namespace MiniRisk.Services.Interfaces;
 
@@ -13,7 +14,7 @@ public interface IGameManager
     void RemoveGame(string gameId);
 
     // Gestión de jugadores en partida
-    // JoinResult AddPlayer(...); // JoinResult check Doc 07 or 11
+    (bool Success, PlayerColor AssignedColor, string? ErrorMessage) AddPlayer(string gameId, string playerId, string playerName, string connectionId);
     void RemovePlayer(string gameId, string playerId);
     void UpdatePlayerConnection(string gameId, string playerId, string connectionId);
     string? GetPlayerName(string playerId);
@@ -27,7 +28,7 @@ public interface IGameManager
     // Desconexión / Reconexión
     void MarkPlayerDisconnected(string gameId, string playerId);
     void MarkPlayerReconnected(string gameId, string playerId, string connectionId);
-    // ReconnectionInfo? GetReconnectionInfo(string playerName);
+    ReconnectionInfo? GetReconnectionInfo(string playerName);
 
     // Acceso con lock
     Task<T> ExecuteWithLock<T>(string gameId, Func<Game, T> action);

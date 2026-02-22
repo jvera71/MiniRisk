@@ -1,0 +1,26 @@
+@using MiniRisk.Models
+
+<div class="game-card">
+    <div class="game-info">
+        <h3 class="game-name">🎮 @Game.Name</h3>
+        <span class="game-creator">Creada por: @Game.CreatorName</span>
+        <span class="game-players">👥 @Game.CurrentPlayers/@Game.MaxPlayers jugadores</span>
+        <span class="game-time">Hace @GetTimeAgo()</span>
+    </div>
+    <div class="game-actions">
+        <button class="btn btn-primary" @onclick="OnJoin">Unirse →</button>
+    </div>
+</div>
+
+@code {
+    [Parameter] public GameSummary Game { get; set; } = default!;
+    [Parameter] public EventCallback OnJoin { get; set; }
+
+    private string GetTimeAgo()
+    {
+        var elapsed = DateTime.UtcNow - Game.CreatedAt;
+        if (elapsed.TotalMinutes < 1) return "unos segundos";
+        if (elapsed.TotalMinutes < 60) return $"{(int)elapsed.TotalMinutes} minutos";
+        return $"{(int)elapsed.TotalHours} horas";
+    }
+}

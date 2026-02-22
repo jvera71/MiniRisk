@@ -1,0 +1,66 @@
+@using MiniRisk.Models
+
+<div class="modal-backdrop">
+    <div class="modal-dialog home-card">
+        <h2 class="modal-title">Crear Nueva Partida</h2>
+
+        <div class="input-group" style="margin-bottom: 1rem;">
+            <label class="input-label" for="gameName">Nombre de la partida</label>
+            <input id="gameName" class="input" type="text" @bind="_gameName" @bind:event="oninput" placeholder="Partida de los viernes..." />
+        </div>
+
+        <div class="input-group" style="margin-bottom: 1rem;">
+            <label class="input-label">Máximo de jugadores</label>
+            <div class="radio-group" style="display: flex; gap: 1rem;">
+                @foreach (var count in new[] { 2, 3, 4, 5, 6 })
+                {
+                    <label style="cursor: pointer;">
+                        <input type="radio" name="maxPlayers" checked="@(_maxPlayers == count)" @onchange="() => _maxPlayers = count" />
+                        @count
+                    </label>
+                }
+            </div>
+        </div>
+
+        <div class="input-group" style="margin-bottom: 2rem;">
+            <label class="input-label">Distribución de territorios</label>
+            <div class="radio-group" style="display: flex; gap: 1rem;">
+                <label style="cursor: pointer;">
+                    <input type="radio" name="distribution" checked="@_randomDistribution" @onchange="() => _randomDistribution = true" />
+                    Aleatoria
+                </label>
+                <!-- Manual is not yet implemented fully, but keeping it in UI for wireframe parity, disable it -->
+                <label style="cursor: not-allowed; opacity: 0.5;">
+                    <input type="radio" name="distribution" disabled />
+                    Manual
+                </label>
+            </div>
+        </div>
+
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 1rem;">
+            <button class="btn btn-secondary" @onclick="OnCancel">Cancelar</button>
+            <button class="btn btn-primary" disabled="@string.IsNullOrWhiteSpace(_gameName)" @onclick="HandleCreate">Crear Partida</button>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<(string Name, GameSettings Settings)> OnCreate { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private string _gameName = string.Empty;
+    private int _maxPlayers = 6;
+    private bool _randomDistribution = true;
+
+    private async Task HandleCreate()
+    {
+        if (string.IsNullOrWhiteSpace(_gameName)) return;
+
+        var settings = new GameSettings
+        {
+            MaxPlayers = _maxPlayers
+        };
+
+        await OnCreate.InvokeAsync((_gameName, settings));
+    }
+}

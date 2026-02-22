@@ -1,0 +1,128 @@
+@using Microsoft.AspNetCore.SignalR.Client
+@using MiniRisk.Models.Dtos
+@implements IAsyncDisposable
+@inject MiniRisk.Services.Interfaces.IGameManager GameManager
+
+<div class="waiting-room">
+    @if (_gameState == null)
+    {
+        <div class="loading">Cargando sala...</div>
+    }
+    else
+    {
+        <div class="waiting-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+            <h2>🎮 @_gameState.GameName</h2>
+            <button class="btn btn-secondary" @onclick="OnLeave">← Abandonar</button>
+        </div>
+
+        <div class="home-card" style="max-width: none; text-align: center; margin-bottom: 2rem;">
+            <div class="player-slots" style="display: flex; justify-content: center; gap: 1rem; flex-wrap: wrap; margin-bottom: 2rem;">
+                @foreach (var player in _gameState.Players)
+                {
+                    <div class="player-slot" style="border: 2px solid var(--player-@player.Color.ToString().ToLower()); padding: 1rem; border-radius: 8px; width: 80px; text-align: center;">
+                        <div class="slot-color" style="font-size: 1.5rem; margin-bottom: 0.5rem; color: var(--player-@player.Color.ToString().ToLower())">
+                            @(GetColorIcon(player.Color))
+                        </div>
+                        <div class="slot-name" style="font-size: 0.8rem; overflow: hidden; text-overflow: ellipsis;">
+                            @player.PlayerName
+                        </div>
+                        @if (IsCurrentCreator(player.PlayerId))
+                        {
+                            <div class="slot-creator" style="font-size: 1.2rem; margin-top: 0.2rem;">👑</div>
+                        }
+                    </div>
+                }
+
+                @for (int i = 0; i < GetEmptySlots(); i++)
+                {
+                    <div class="player-slot slot-empty" style="border: 2px dashed var(--border-strong); padding: 1rem; border-radius: 8px; width: 80px; text-align: center; opacity: 0.5;">
+                        <div class="slot-color" style="font-size: 1.5rem; margin-bottom: 0.5rem;">❔</div>
+                        <div class="slot-name" style="font-size: 0.8rem;">???</div>
+                    </div>
+                }
+            </div>
+
+            <p style="margin-bottom: 1.5rem; color: var(--text-secondary);">
+                Esperando jugadores... @_gameState.Players.Count/@GameManager.GetGame(GameId)?.Settings.MaxPlayers
+            </p>
+
+            @if (IsCreator)
+            {
+                <button class="btn btn-primary" disabled="@(_gameState.Players.Count < 2)" @onclick="OnStart">
+                    ▶ INICIAR PARTIDA
+                </button>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string GameId { get; set; } = string.Empty;
+    [Parameter] public string PlayerId { get; set; } = string.Empty;
+    [Parameter] public bool IsCreator { get; set; }
+    [Parameter] public EventCallback OnLeave { get; set; }
+    [Parameter] public EventCallback OnStart { get; set; }
+    [Parameter] public HubConnection? HubConnection { get; set; }
+
+    private GameStateDto? _gameState;
+    private MiniRisk.Models.Game? _gameModel;
+
+    protected override void OnInitialized()
+    {
+        _gameModel = GameManager.GetGame(GameId);
+        UpdateViewState();
+
+        if (HubConnection != null)
+        {
+            HubConnection.On<GameStateDto>("GameStateUpdated", state =>
+            {
+                _gameState = state;
+                InvokeAsync(StateHasChanged);
+            });
+        }
+    }
+
+    private void UpdateViewState()
+    {
+        // Simple mapping just to get players if DTO map fails or is not complete yet
+        if (_gameModel != null)
+        {
+            var mapService = new MiniRisk.Services.MapService();
+            _gameState = _gameModel.ToDto(mapService);
+        }
+    }
+
+    private int GetEmptySlots()
+    {
+        if (_gameModel == null || _gameState == null) return 0;
+        return Math.Max(0, _gameModel.Settings.MaxPlayers - _gameState.Players.Count);
+    }
+
+    private bool IsCurrentCreator(string playerId)
+    {
+        return _gameModel?.CreatorPlayerId == playerId;
+    }
+
+    private string GetColorIcon(MiniRisk.Models.Enums.PlayerColor color)
+    {
+        return color switch
+        {
+            MiniRisk.Models.Enums.PlayerColor.Red => "🔴",
+            MiniRisk.Models.Enums.PlayerColor.Blue => "🔵",
+            MiniRisk.Models.Enums.PlayerColor.Green => "🟢",
+            MiniRisk.Models.Enums.PlayerColor.Yellow => "🟡",
+            MiniRisk.Models.Enums.PlayerColor.Purple => "🟣",
+            MiniRisk.Models.Enums.PlayerColor.Orange => "🟠",
+            _ => "⚫"
+        };
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (HubConnection != null)
+        {
+            HubConnection.Remove("GameStateUpdated");
+        }
+        return ValueTask.CompletedTask;
+    }
+}

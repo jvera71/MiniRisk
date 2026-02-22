@@ -1,160 +1,78 @@
 @page "/lobby"
+@using Microsoft.AspNetCore.SignalR.Client
+@using MiniRisk.Models
+@using MiniRisk.Models.Dtos
 @inject IPlayerSessionService PlayerSession
 @inject IGameManager GameManager
 @inject NavigationManager Navigation
+@implements IAsyncDisposable
 
-<PageTitle>Lobby - MiniRisk</PageTitle>
+<PageTitle>MiniRisk — Lobby</PageTitle>
 
-<div class="premium-container">
-    <div class="glass-card animate-fade-in" style="max-width: 800px;">
-        <div class="lobby-header">
-            <h1 class="game-title">Lobby</h1>
-            <div class="player-info">
-                <span>Jugando como: <strong>@PlayerSession.PlayerName</strong></span>
-                <button class="btn-logout" @onclick="Logout">Cerrar Sesión</button>
-            </div>
+<div class="lobby-container">
+    <header class="lobby-header">
+        <h1 class="logo-text">🎲 MiniRisk</h1>
+        <div class="player-badge">
+            @PlayerSession.PlayerName
+            <span class="connection-dot connected"></span>
         </div>
+    </header>
 
+    @if (_currentGameId != null)
+    {
+        <!-- Sala de espera -->
+        <MiniRisk.Components.Shared.WaitingRoom GameId="@_currentGameId"
+                     PlayerId="@PlayerSession.PlayerId"
+                     IsCreator="@_isCreator"
+                     OnLeave="HandleLeaveGame"
+                     OnStart="HandleStartGame"
+                     HubConnection="_hubConnection" />
+    }
+    else
+    {
+        <!-- Lista de partidas -->
         <div class="lobby-content">
-            <div class="create-game-section">
-                <h3>Crear Nueva Partida</h3>
-                <div class="input-group">
-                    <input type="text" @bind="newGameName" class="premium-input" placeholder="Nombre de la partida..." />
-                    <button class="premium-btn" @onclick="CreateGame" disabled="@(string.IsNullOrWhiteSpace(newGameName))">
-                        ➕ Crear
-                    </button>
-                </div>
+            <div class="lobby-title-row">
+                <h2>Partidas Disponibles</h2>
+                <button class="btn btn-primary" @onclick="() => _showCreateDialog = true">
+                    + Crear Partida
+                </button>
             </div>
 
-            <div class="games-list-section">
-                <h3>Partidas Disponibles</h3>
-                @if (availableGames.Count == 0)
-                {
-                    <p class="empty-message">No hay partidas disponibles en este momento. ¡Crea una!</p>
-                }
-                else
-                {
-                    <div class="games-grid">
-                        @foreach (var game in availableGames)
-                        {
-                            <div class="game-card">
-                                <div class="game-info">
-                                    <span class="game-name">@game.Name</span>
-                                    <span class="game-creator">Por: @game.CreatorName</span>
-                                    <span class="game-players">@game.CurrentPlayers / @game.MaxPlayers jugadores</span>
-                                </div>
-                                <button class="premium-btn btn-sm" @onclick="() => JoinGame(game.Id)">
-                                    Unirse
-                                </button>
-                            </div>
-                        }
-                    </div>
-                }
-            </div>
+            @if (_games.Count == 0)
+            {
+                <div class="empty-state">
+                    <p>No hay partidas disponibles.</p>
+                    <p>¡Crea una nueva para empezar!</p>
+                </div>
+            }
+            else
+            {
+                <div class="game-list">
+                    @foreach (var game in _games)
+                    {
+                        <MiniRisk.Components.Shared.GameCard Game="@game" OnJoin="() => HandleJoinGame(game.Id)" />
+                    }
+                </div>
+            }
         </div>
-    </div>
+    }
+
+    @if (_showCreateDialog)
+    {
+        <MiniRisk.Components.Shared.CreateGameDialog OnCreate="HandleCreateGame"
+                          OnCancel="() => _showCreateDialog = false" />
+    }
 </div>
 
-<style>
-    .lobby-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 2rem;
-        border-bottom: 1px solid var(--glass-border);
-        padding-bottom: 1rem;
-    }
-
-    .player-info {
-        font-size: 0.9rem;
-        display: flex;
-        flex-direction: column;
-        align-items: flex-end;
-        gap: 0.25rem;
-    }
-
-    .btn-logout {
-        background: none;
-        border: none;
-        color: var(--primary);
-        cursor: pointer;
-        padding: 0;
-        font-size: 0.8rem;
-        text-decoration: underline;
-    }
-
-    .lobby-content {
-        display: grid;
-        grid-template-columns: 1fr 1fr;
-        gap: 2rem;
-        text-align: left;
-    }
-
-    h3 {
-        color: var(--accent);
-        font-size: 1.2rem;
-        margin-bottom: 1.5rem;
-    }
-
-    .empty-message {
-        opacity: 0.6;
-        font-style: italic;
-    }
-
-    .games-grid {
-        display: flex;
-        flex-direction: column;
-        gap: 1rem;
-    }
-
-    .game-card {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid var(--glass-border);
-        border-radius: 12px;
-        padding: 1rem;
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        transition: background 0.3s ease;
-    }
-
-    .game-card:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-
-    .game-info {
-        display: flex;
-        flex-direction: column;
-        gap: 0.2rem;
-    }
-
-    .game-name {
-        font-weight: 600;
-        font-size: 1.1rem;
-    }
-
-    .game-creator, .game-players {
-        font-size: 0.8rem;
-        opacity: 0.7;
-    }
-
-    .btn-sm {
-        padding: 0.5rem 1rem;
-        font-size: 0.9rem;
-    }
-
-    @@media (max-width: 768px) {
-        .lobby-content {
-            grid-template-columns: 1fr;
-        }
-    }
-</style>
-
 @code {
-    private string newGameName = "";
-    private List<GameSummary> availableGames = [];
+    private HubConnection? _hubConnection;
+    private List<GameSummary> _games = [];
+    private string? _currentGameId;
+    private bool _isCreator;
+    private bool _showCreateDialog;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         if (!PlayerSession.IsIdentified)
         {
@@ -162,34 +80,89 @@
             return;
         }
 
-        RefreshGames();
+        // Conectar al hub
+        _hubConnection = new HubConnectionBuilder()
+            .WithUrl(Navigation.ToAbsoluteUri("/gamehub"))
+            .WithAutomaticReconnect()
+            .Build();
+
+        // Escuchar actualizaciones del lobby
+        _hubConnection.On<List<GameSummary>>("LobbyUpdated", games =>
+        {
+            _games = games;
+            InvokeAsync(StateHasChanged);
+        });
+
+        _hubConnection.On<string>("GameStarting", gameId =>
+        {
+            Navigation.NavigateTo($"/game/{gameId}");
+        });
+
+        await _hubConnection.StartAsync();
+
+        // Registrar conexión y obtener partidas
+        await _hubConnection.SendAsync("RegisterPlayer",
+            PlayerSession.PlayerId, PlayerSession.PlayerName);
+
+        _games = GameManager.GetAvailableGames();
     }
 
-    private void RefreshGames()
+    private async Task HandleCreateGame((string name, GameSettings settings) data)
     {
-        availableGames = GameManager.GetAvailableGames();
+        _showCreateDialog = false;
+
+        var summary = GameManager.CreateGame(
+            data.name, PlayerSession.PlayerId, PlayerSession.PlayerName, data.settings);
+
+        await HandleJoinGame(summary.Id);
+        _isCreator = true;
     }
 
-    private void CreateGame()
+    private async Task HandleJoinGame(string gameId)
     {
-        if (string.IsNullOrWhiteSpace(newGameName)) return;
+        if (_hubConnection == null) return;
 
-        var settings = new GameSettings { MaxPlayers = 6 }; // Default
-        var summary = GameManager.CreateGame(newGameName, PlayerSession.PlayerId, PlayerSession.PlayerName, settings);
-        
-        JoinGame(summary.Id);
+        var result = GameManager.AddPlayer(
+            gameId, PlayerSession.PlayerId,
+            PlayerSession.PlayerName, _hubConnection.ConnectionId!);
+
+        if (result.Success)
+        {
+            _currentGameId = gameId;
+            PlayerSession.JoinGame(gameId);
+            PlayerSession.SetColor(result.AssignedColor);
+
+            await _hubConnection.SendAsync("JoinGameGroup", gameId);
+        }
     }
 
-    private void JoinGame(string gameId)
+    private async Task HandleLeaveGame()
     {
-        PlayerSession.JoinGame(gameId);
-        Navigation.NavigateTo($"/game/{gameId}");
+        if (_currentGameId != null && _hubConnection != null)
+        {
+            GameManager.RemovePlayer(_currentGameId, PlayerSession.PlayerId);
+            await _hubConnection.SendAsync("LeaveGameGroup", _currentGameId);
+
+            _currentGameId = null;
+            _isCreator = false;
+            PlayerSession.LeaveGame();
+            _games = GameManager.GetAvailableGames();
+        }
     }
 
-    private void Logout()
+    private async Task HandleStartGame()
     {
-        GameManager.UnregisterConnection(PlayerSession.PlayerId); // Not perfectly accurate but works for clearing memory
-        PlayerSession.Clear();
-        Navigation.NavigateTo("/");
+        if (_currentGameId != null && _hubConnection != null)
+        {
+            await _hubConnection.SendAsync("StartGame", _currentGameId, PlayerSession.PlayerId);
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_hubConnection != null)
+        {
+            await _hubConnection.DisposeAsync();
+        }
     }
 }

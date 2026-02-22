@@ -92,6 +92,45 @@ public class GameManager : IGameManager
         );
     }
 
+    public (bool Success, PlayerColor AssignedColor, string? ErrorMessage) AddPlayer(string gameId, string playerId, string playerName, string connectionId)
+    {
+        if (!_games.TryGetValue(gameId, out var game))
+        {
+            return (false, PlayerColor.Neutral, "Partida no encontrada.");
+        }
+
+        // Simplicidad: Lock sobre el objeto Game, idealmente se usaría ExecuteWithLock pero AddPlayer es síncrono.
+        lock (game)
+        {
+            if (game.Status != GameStatus.WaitingForPlayers)
+                return (false, PlayerColor.Neutral, "La partida ya ha comenzado.");
+
+            if (game.Players.Count >= game.Settings.MaxPlayers)
+                return (false, PlayerColor.Neutral, "La partida está llena.");
+
+            if (game.Players.Any(p => p.Id == playerId))
+                return (false, PlayerColor.Neutral, "Ya estás en la partida.");
+
+            // Asignar color (simple lógica: primero rojo, luego azul, etc)
+            var availableColors = Enum.GetValues<PlayerColor>()
+                                      .Where(c => c != PlayerColor.Neutral && !game.Players.Any(p => p.Color == c))
+                                      .ToList();
+            var color = availableColors.First();
+
+            game.Players.Add(new Player
+            {
+                Id = playerId,
+                Name = playerName,
+                Color = color,
+                IsConnected = true
+            });
+
+            UpdatePlayerConnection(gameId, playerId, connectionId);
+
+            return (true, color, null);
+        }
+    }
+
     public void RemovePlayer(string gameId, string playerId)
     {
         if (_games.TryGetValue(gameId, out var game))
@@ -106,6 +145,23 @@ public class GameManager : IGameManager
                 }
             }
         }
+    }
+
+    public ReconnectionInfo? GetReconnectionInfo(string playerName)
+    {
+        var game = _games.Values.FirstOrDefault(g => 
+            g.Status != GameStatus.Finished && 
+            g.Players.Any(p => p.Name == playerName && !p.IsConnected));
+
+        if (game != null)
+        {
+            return new ReconnectionInfo
+            {
+                GameId = game.Id,
+                GameName = game.Name
+            };
+        }
+        return null;
     }
 
     public void UpdatePlayerConnection(string gameId, string playerId, string connectionId)
