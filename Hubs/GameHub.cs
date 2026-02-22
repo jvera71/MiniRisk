@@ -86,6 +86,44 @@ public class GameHub : Hub
         });
     }
 
+    public async Task LeaveGame(string gameId, string playerId)
+    {
+        _gameManager.RemovePlayer(gameId, playerId);
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetGroupName(gameId));
+        
+        var playerName = _gameManager.GetPlayerName(playerId) ?? "Jugador";
+        await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerLeft", new PlayerLeftDto
+        {
+            PlayerId = playerId,
+            PlayerName = playerName
+        });
+        
+        var game = _gameManager.GetGame(gameId);
+        if (game != null)
+        {
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        }
+    }
+
+    public async Task RejoinGame(string gameId, string playerId)
+    {
+        _gameManager.UpdatePlayerConnection(gameId, playerId, Context.ConnectionId);
+        await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(gameId));
+        
+        var playerName = _gameManager.GetPlayerName(playerId) ?? "Jugador";
+        await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerReconnected", new PlayerReconnectedDto
+        {
+            PlayerId = playerId,
+            PlayerName = playerName
+        });
+        
+        var game = _gameManager.GetGame(gameId);
+        if (game != null)
+        {
+            await Clients.Caller.SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        }
+    }
+
     public async Task StartGame(string gameId, string playerId)
     {
         await _gameManager.ExecuteWithLock(gameId, async (game) =>
@@ -118,6 +156,21 @@ public class GameHub : Hub
     // ═══════════════════════════════════════
     // ACCIONES DE JUEGO
     // ═══════════════════════════════════════
+
+    public async Task PlaceInitialArmies(string gameId, string playerId, TerritoryName territory, int count)
+    {
+        await _gameManager.ExecuteWithLock(gameId, async (game) =>
+        {
+            var result = _gameEngine.PlaceInitialArmies(game, playerId, territory, count);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "PlaceInitialArmies" });
+                return;
+            }
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
 
     public async Task PlaceReinforcements(string gameId, string playerId, TerritoryName territory, int count)
     {
@@ -194,6 +247,36 @@ public class GameHub : Hub
         });
     }
 
+    public async Task MoveArmiesAfterConquest(string gameId, string playerId, TerritoryName from, TerritoryName to, int count)
+    {
+        await _gameManager.ExecuteWithLock(gameId, async (game) =>
+        {
+            var result = _gameEngine.MoveArmiesAfterConquest(game, playerId, from, to, count);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "MoveArmiesAfterConquest" });
+                return;
+            }
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
+
+    public async Task EndAttackPhase(string gameId, string playerId)
+    {
+        await _gameManager.ExecuteWithLock(gameId, async (game) =>
+        {
+            var result = _gameEngine.EndAttackPhase(game, playerId);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "EndAttackPhase" });
+                return;
+            }
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
+
     public async Task Fortify(string gameId, string playerId, TerritoryName from, TerritoryName to, int count)
     {
         await _gameManager.ExecuteWithLock(gameId, async (game) =>
@@ -221,6 +304,66 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
+
+    public async Task EndTurn(string gameId, string playerId)
+    {
+        await _gameManager.ExecuteWithLock(gameId, async (game) =>
+        {
+            var result = _gameEngine.EndTurn(game, playerId);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "EndTurn" });
+                return;
+            }
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
+
+    public async Task TradeCards(string gameId, string playerId, string[] cardIds)
+    {
+        await _gameManager.ExecuteWithLock(gameId, async (game) =>
+        {
+            var result = _gameEngine.TradeCards(game, playerId, cardIds);
+            if (!result.Success)
+            {
+                await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "TradeCards" });
+                return;
+            }
+
+            var player = game.GetPlayerById(playerId);
+            if (player != null)
+            {
+                await Clients.Group(GetGroupName(gameId)).SendAsync("CardsTraded", new CardsTradedDto
+                {
+                    PlayerId = playerId,
+                    PlayerName = player.Name,
+                    TradeNumber = game.TradeCount,
+                    ArmiesReceived = 0 // En una versión más sofisticada, lo devolvería el Engine en el Result 
+                });
+            }
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+        });
+    }
+
+    public async Task SendChatMessage(string gameId, string playerId, string message)
+    {
+        var game = _gameManager.GetGame(gameId);
+        if (game == null) return;
+        
+        var player = game.GetPlayerById(playerId);
+        if (player == null) return;
+
+        await Clients.Group(GetGroupName(gameId)).SendAsync("ChatMessageReceived", new ChatMessageDto
+        {
+            PlayerId = playerId,
+            PlayerName = player.Name,
+            PlayerColor = player.Color,
+            Message = message,
+            Timestamp = DateTime.UtcNow
         });
     }
 

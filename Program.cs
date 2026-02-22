@@ -21,8 +21,18 @@ namespace MiniRisk
             builder.Services.AddTransient<MiniRisk.Services.Interfaces.IGameEngine, MiniRisk.Services.GameEngine>();
             builder.Services.AddTransient<MiniRisk.Services.Interfaces.IDiceService, MiniRisk.Services.DiceService>();
             builder.Services.AddTransient<MiniRisk.Services.Interfaces.ICardService, MiniRisk.Services.CardService>();
-            builder.Services.AddSignalR();
-
+            builder.Services.AddSignalR(options =>
+            {
+                options.KeepAliveInterval = TimeSpan.FromSeconds(15);
+                options.ClientTimeoutInterval = TimeSpan.FromSeconds(30);
+                options.MaximumReceiveMessageSize = 64 * 1024; // 64 KB
+                options.EnableDetailedErrors = builder.Environment.IsDevelopment();
+            })
+            .AddJsonProtocol(options =>
+            {
+                options.PayloadSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;
+                options.PayloadSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
+            });
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
