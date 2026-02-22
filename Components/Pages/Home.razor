@@ -1,7 +1,140 @@
 ﻿@page "/"
+@using Microsoft.AspNetCore.Components.Forms
+@inject IPlayerSessionService PlayerSession
+@inject IGameManager GameManager
+@inject NavigationManager Navigation
 
-<PageTitle>Home</PageTitle>
+<PageTitle>MiniRisk - Conquista el Mundo</PageTitle>
 
-<h1>Hello, world!</h1>
+<div class="premium-container">
+    <div class="glass-card animate-fade-in">
+        <h1 class="game-title">MiniRisk</h1>
+        <p class="game-subtitle">Conquista el mundo con tus amigos</p>
 
-Welcome to your new app.
+        @if (PlayerSession.IsIdentified)
+        {
+            <div class="reconnecting-state">
+                <p>Ya estás identificado como <strong>@PlayerSession.PlayerName</strong></p>
+                <button class="premium-btn" @onclick="GoToLobby">
+                    🚀 Ir al Lobby
+                </button>
+            </div>
+        }
+        else
+        {
+            <EditForm Model="model" OnValidSubmit="HandleSubmit" class="identity-form">
+                <DataAnnotationsValidator />
+                
+                <div class="input-group">
+                    <label for="playerName">¿Cómo te llamas?</label>
+                    <InputText id="playerName" 
+                              @bind-Value="model.PlayerName" 
+                              class="premium-input" 
+                              placeholder="Escribe tu nombre..." 
+                              autocomplete="off" />
+                    <ValidationMessage For="@(() => model.PlayerName)" class="error-message" />
+                </div>
+
+                @if (!string.IsNullOrEmpty(errorMessage))
+                {
+                    <div class="error-message">
+                        @errorMessage
+                    </div>
+                }
+
+                <button type="submit" class="premium-btn" disabled="@isSubmitting">
+                    @if (isSubmitting)
+                    {
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Entrando...</span>
+                    }
+                    else
+                    {
+                        <span>🚀 Entrar</span>
+                    }
+                </button>
+            </EditForm>
+        }
+
+        <div class="stats-bar">
+            <div class="stat-item">
+                <div class="stat-dot"></div>
+                <span>@GameManager.GetAvailableGames().Count partidas activas</span>
+            </div>
+            <div class="stat-item">
+                <span>V 1.0</span>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private NameModel model = new();
+    private string? errorMessage;
+    private bool isSubmitting;
+
+    protected override void OnInitialized()
+    {
+        if (PlayerSession.IsIdentified)
+        {
+            Navigation.NavigateTo("/lobby");
+        }
+    }
+
+    private async Task HandleSubmit()
+    {
+        isSubmitting = true;
+        errorMessage = null;
+
+        var name = model.PlayerName?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            errorMessage = "El nombre es obligatorio.";
+            isSubmitting = false;
+            return;
+        }
+
+        if (name.Length < 2 || name.Length > 20)
+        {
+            errorMessage = "El nombre debe tener entre 2 y 20 caracteres.";
+            isSubmitting = false;
+            return;
+        }
+
+        if (GameManager.IsNameTaken(name))
+        {
+            errorMessage = "Ese nombre ya está en uso en otra sesión.";
+            isSubmitting = false;
+            return;
+        }
+
+        // Simular un pequeño delay para feedback visual
+        await Task.Delay(500);
+
+        try 
+        {
+            PlayerSession.SetPlayer(name);
+            GameManager.RegisterPlayer(PlayerSession.PlayerId, name);
+            Navigation.NavigateTo("/lobby");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Ocurrió un error al iniciar sesión.";
+            isSubmitting = false;
+        }
+    }
+
+    private void GoToLobby()
+    {
+        Navigation.NavigateTo("/lobby");
+    }
+
+    public class NameModel
+    {
+        [System.ComponentModel.DataAnnotations.Required(ErrorMessage = "El nombre es obligatorio")]
+        [System.ComponentModel.DataAnnotations.StringLength(20, MinimumLength = 2, ErrorMessage = "Entre 2 y 20 caracteres")]
+        [System.ComponentModel.DataAnnotations.RegularExpression(@"^[a-zA-Z0-9\s\-]+$", ErrorMessage = "Solo letras, números, espacios y guiones")]
+        public string? PlayerName { get; set; }
+    }
+}

@@ -12,6 +12,17 @@ namespace MiniRisk
             builder.Services.AddRazorComponents()
                 .AddInteractiveServerComponents();
 
+            // MiniRisk Services
+            builder.Services.AddSingleton<MiniRisk.Services.Interfaces.IGameManager, MiniRisk.Services.GameManager>();
+            builder.Services.AddSingleton<MiniRisk.Services.Interfaces.IMapService, MiniRisk.Services.MapService>();
+            
+            builder.Services.AddScoped<MiniRisk.Services.Interfaces.IPlayerSessionService, MiniRisk.Services.PlayerSessionService>();
+            
+            builder.Services.AddTransient<MiniRisk.Services.Interfaces.IGameEngine, MiniRisk.Services.GameEngine>();
+            builder.Services.AddTransient<MiniRisk.Services.Interfaces.IDiceService, MiniRisk.Services.DiceService>();
+            builder.Services.AddTransient<MiniRisk.Services.Interfaces.ICardService, MiniRisk.Services.CardService>();
+            builder.Services.AddSignalR();
+
             var app = builder.Build();
 
             // Configure the HTTP request pipeline.
@@ -30,6 +41,7 @@ namespace MiniRisk
             app.MapStaticAssets();
             app.MapRazorComponents<App>()
                 .AddInteractiveServerRenderMode();
+            app.MapHub<MiniRisk.Hubs.GameHub>("/gamehub");
 
             app.Run();
         }
