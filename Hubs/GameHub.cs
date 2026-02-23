@@ -30,9 +30,15 @@ public class GameHub : Hub
         if (playerId != null)
         {
             _gameManager.UnregisterConnection(Context.ConnectionId);
-            // Ideally notify games where this player was active
         }
         await base.OnDisconnectedAsync(exception);
+    }
+
+    public async Task RegisterPlayer(string playerId, string playerName)
+    {
+        _gameManager.RegisterConnection(Context.ConnectionId, playerId);
+        var games = _gameManager.GetAvailableGames();
+        await Clients.Caller.SendAsync("LobbyUpdated", games);
     }
 
     // ═══════════════════════════════════════
@@ -49,42 +55,94 @@ public class GameHub : Hub
                 return;
             }
 
-            if (game.Players.Count >= game.Settings.MaxPlayers)
+            if (game.Players.Count >= game.Settings.MaxPlayers && !game.Players.Any(p => p.Id == playerId))
             {
                 await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = "La partida está llena.", ActionAttempted = "JoinGame" });
                 return;
             }
 
-            if (game.Players.Any(p => p.Id == playerId))
+            var player = game.Players.FirstOrDefault(p => p.Id == playerId);
+            if (player == null)
             {
-                // Re-unirse si ya estaba (ej: recarga de página rápida)
-                await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(gameId));
-                await Clients.Caller.SendAsync("GameStateUpdated", game.ToDto(_mapService));
-                return;
+                var result = _gameManager.AddPlayer(gameId, playerId, playerName, Context.ConnectionId);
+                if (!result.Success)
+                {
+                    await Clients.Caller.SendAsync("ActionError", new ActionErrorDto { Message = result.ErrorMessage!, ActionAttempted = "JoinGame" });
+                    return;
+                }
+                player = game.Players.FirstOrDefault(p => p.Id == playerId);
             }
-
-            var newPlayer = new Player
+            else
             {
-                Id = playerId,
-                Name = playerName,
-                Color = (PlayerColor)game.Players.Count // Asignación automática de color
-            };
-
-            game.Players.Add(newPlayer);
-            _gameManager.UpdatePlayerConnection(gameId, playerId, Context.ConnectionId);
+                _gameManager.UpdatePlayerConnection(gameId, playerId, Context.ConnectionId);
+            }
 
             await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(gameId));
 
-            await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerJoined", new PlayerJoinedDto
+            if (player != null)
             {
-                PlayerId = playerId,
-                PlayerName = playerName,
-                Color = newPlayer.Color
-            });
+                await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerJoined", new PlayerJoinedDto
+                {
+                    PlayerId = playerId,
+                    PlayerName = player.Name,
+                    Color = player.Color
+                });
+            }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            
+            // Notificar al lobby que una partida ha cambiado (ej: número de jugadores)
+            await Clients.All.SendAsync("LobbyUpdated", _gameManager.GetAvailableGames());
         });
     }
+
+    public async Task JoinGameGroup(string gameId)
+    {
+        var playerId = _gameManager.GetPlayerIdByConnection(Context.ConnectionId);
+        if (playerId == null) return;
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, GetGroupName(gameId));
+        
+        var game = _gameManager.GetGame(gameId);
+        if (game != null)
+        {
+            var player = game.Players.FirstOrDefault(p => p.Id == playerId);
+            if (player != null)
+            {
+                await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerJoined", new PlayerJoinedDto
+                {
+                    PlayerId = playerId,
+                    PlayerName = player.Name,
+                    Color = player.Color
+                });
+            }
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await Clients.All.SendAsync("LobbyUpdated", _gameManager.GetAvailableGames());
+        }
+    }
+
+    public async Task LeaveGameGroup(string gameId)
+    {
+        var playerId = _gameManager.GetPlayerIdByConnection(Context.ConnectionId);
+        if (playerId == null) return;
+
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GetGroupName(gameId));
+        
+        var playerName = _gameManager.GetPlayerName(playerId) ?? "Jugador";
+        await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerLeft", new PlayerLeftDto
+        {
+            PlayerId = playerId,
+            PlayerName = playerName
+        });
+        
+        var game = _gameManager.GetGame(gameId);
+        if (game != null)
+        {
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await Clients.All.SendAsync("LobbyUpdated", _gameManager.GetAvailableGames());
+        }
+    }
+
 
     public async Task LeaveGame(string gameId, string playerId)
     {
@@ -143,7 +201,27 @@ public class GameHub : Hub
             _gameEngine.InitializeGame(game);
             _gameEngine.DistributeTerritoriesRandomly(game);
 
-            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            var firstPlayer = game.GetCurrentPlayer();
+            var gameStateDto = game.ToDto(_mapService);
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated",    gameStateDto);
+            await Clients.Group(GetGroupName(gameId)).SendAsync("GameStarting", gameId);
+            await Clients.Group(GetGroupName(gameId)).SendAsync("TurnChanged", new TurnChangedDto
+            {
+                PlayerId = firstPlayer.Id,
+                PlayerName = firstPlayer.Name,
+                PlayerColor = firstPlayer.Color,
+                Phase = game.Phase,
+                TurnNumber = game.TurnNumber,
+                Reinforcements = game.RemainingReinforcements
+            });
+
+            await Clients.Group(GetGroupName(gameId)).SendAsync("SystemMessage", new SystemMessageDto { 
+                Message = "¡La partida ha comenzado! Distribuyendo territorios...",
+                Type = SystemMessageType.Info,
+                Timestamp = DateTime.UtcNow
+            });
+            await Clients.All.SendAsync("LobbyUpdated", _gameManager.GetAvailableGames());
             
             // Notificar a cada jugador sobre sus cartas (aunque al inicio no suelen tener)
             foreach (var player in game.Players)
@@ -199,6 +277,12 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await Clients.Group(GetGroupName(gameId)).SendAsync("PhaseChanged", new PhaseChangedDto
+            {
+                NewPhase = game.Phase,
+                PlayerId = playerId,
+                PlayerName = game.GetPlayerById(playerId)?.Name ?? ""
+            });
         });
     }
 
@@ -228,6 +312,18 @@ public class GameHub : Hub
             };
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("DiceRolled", diceDto);
+
+            if (result.PlayerEliminated)
+            {
+                var eliminated = game.GetPlayerById(result.EliminatedPlayerId!);
+                await Clients.Group(GetGroupName(gameId)).SendAsync("PlayerEliminated", new PlayerEliminatedDto
+                {
+                    EliminatedPlayerId = result.EliminatedPlayerId!,
+                    EliminatedPlayerName = eliminated?.Name ?? "Jugador",
+                    EliminatedByPlayerId = playerId,
+                    EliminatedByPlayerName = game.GetPlayerById(playerId)?.Name ?? "Atacante"
+                });
+            }
 
             // Si hubo conquista, se actualiza el estado (el Engine ya cambió el owner)
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
@@ -274,6 +370,12 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await Clients.Group(GetGroupName(gameId)).SendAsync("PhaseChanged", new PhaseChangedDto
+            {
+                NewPhase = game.Phase,
+                PlayerId = playerId,
+                PlayerName = game.GetPlayerById(playerId)?.Name ?? ""
+            });
         });
     }
 
@@ -289,6 +391,7 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await BroadcastTurnChange(gameId, game);
         });
     }
 
@@ -304,6 +407,7 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await BroadcastTurnChange(gameId, game);
         });
     }
 
@@ -319,6 +423,7 @@ public class GameHub : Hub
             }
 
             await Clients.Group(GetGroupName(gameId)).SendAsync("GameStateUpdated", game.ToDto(_mapService));
+            await BroadcastTurnChange(gameId, game);
         });
     }
 
@@ -370,6 +475,20 @@ public class GameHub : Hub
     // ═══════════════════════════════════════
     // AUXILIARES
     // ═══════════════════════════════════════
+
+    private async Task BroadcastTurnChange(string gameId, Game game)
+    {
+        var nextPlayer = game.GetCurrentPlayer();
+        await Clients.Group(GetGroupName(gameId)).SendAsync("TurnChanged", new TurnChangedDto
+        {
+            PlayerId = nextPlayer.Id,
+            PlayerName = nextPlayer.Name,
+            PlayerColor = nextPlayer.Color,
+            Phase = game.Phase,
+            TurnNumber = game.TurnNumber,
+            Reinforcements = game.RemainingReinforcements
+        });
+    }
 
     private string GetGroupName(string gameId) => $"game-{gameId}";
 }

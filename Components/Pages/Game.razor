@@ -92,7 +92,7 @@ else
 
         await _hubConnection.StartAsync();
 
-        await _hubConnection.SendAsync("JoinGame", GameId);
+        await _hubConnection.SendAsync("JoinGame", GameId, PlayerSession.PlayerId, PlayerSession.PlayerName);
         
         // El estado inicial se recibirá vía GameStateUpdated o podemos pedirlo.
         // Simulamos petición inicial:
@@ -107,29 +107,40 @@ else
             InvokeAsync(StateHasChanged);
         });
 
-        _hubConnection.On<AttackResult>("DiceRolled", result =>
+        _hubConnection.On<DiceResultDto>("DiceRolled", result =>
         {
-            _lastAttackResult = result;
+            _lastAttackResult = new AttackResult 
+            {
+                AttackerDice = result.AttackerDice,
+                DefenderDice = result.DefenderDice,
+                AttackerLosses = result.AttackerLosses,
+                DefenderLosses = result.DefenderLosses,
+                TerritoryConquered = result.TerritoryConquered
+                // Note: We might need to map territory IDs to TerritoryName enum if needed
+            };
+            
+            if (result.TerritoryConquered)
+            {
+                AddToast($"🏴 {result.AttackerName} conquistó un territorio de {result.DefenderName}", ToastType.Info);
+                _selectedAttacker = null;
+                _selectedDefender = null;
+            }
+            
             InvokeAsync(StateHasChanged);
         });
 
-        _hubConnection.On<string, string>("TerritoryConquered", (playerName, territoryName) =>
+        _hubConnection.On<PlayerEliminatedDto>("PlayerEliminated", dto =>
         {
-            AddToast($"🏴 {playerName} conquistó {territoryName}", ToastType.Info);
-            _selectedAttacker = null;
-            _selectedDefender = null;
+            AddToast($"💀 {dto.EliminatedPlayerName} ha sido eliminado por {dto.EliminatedByPlayerName}", ToastType.Error);
             InvokeAsync(StateHasChanged);
         });
 
-        _hubConnection.On<string>("PlayerEliminated", playerName =>
+        _hubConnection.On<TurnChangedDto>("TurnChanged", dto =>
         {
-            AddToast($"💀 {playerName} ha sido eliminado", ToastType.Error);
-            InvokeAsync(StateHasChanged);
-        });
-
-        _hubConnection.On("YourTurn", () =>
-        {
-            AddToast("¡Es tu turno! Fase de refuerzo.", ToastType.Info);
+            if (dto.PlayerId == PlayerSession.PlayerId)
+            {
+                AddToast("¡Es tu turno! Fase de refuerzo.", ToastType.Info);
+            }
             InvokeAsync(StateHasChanged);
         });
 
